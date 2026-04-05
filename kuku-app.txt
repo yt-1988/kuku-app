@@ -1,0 +1,164 @@
+import React, { useState, useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+
+function getRandomQuestion() {
+  const a = Math.floor(Math.random() * 9) + 1;
+  const b = Math.floor(Math.random() * 9) + 1;
+  return { a, b };
+}
+
+export default function KukuApp() {
+  const [mode, setMode] = useState(null); // solo / class / teacher
+  const [students, setStudents] = useState([]);
+  const [name, setName] = useState("");
+
+  const [question, setQuestion] = useState(getRandomQuestion());
+  const [answer, setAnswer] = useState("");
+  const [score, setScore] = useState(0);
+  const [count, setCount] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(7);
+  const [isFinished, setIsFinished] = useState(false);
+  const [started, setStarted] = useState(false);
+
+  const [startTime, setStartTime] = useState(Date.now());
+  const [times, setTimes] = useState([]);
+  const [mistakes, setMistakes] = useState([]);
+
+  useEffect(() => {
+    if (isFinished || mode === "teacher") return;
+
+    // クラスモードだけ先生スタート待ち
+    if (mode === "class" && !started) return;
+
+    if (timeLeft === 0) {
+      nextQuestion(false);
+      return;
+    }
+
+    const timer = setTimeout(() => setTimeLeft(t => t - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [timeLeft, started, isFinished, mode]);
+
+  useEffect(() => {
+    if (mode === "class" && name) {
+      const avg = times.length ? (times.reduce((a,b)=>a+b,0)/times.length).toFixed(2) : 0;
+
+      setStudents(prev => {
+        const other = prev.filter(s => s.name !== name);
+        return [...other, { name, score, avg, mistakes }];
+      });
+    }
+  }, [score, times, mistakes, name, mode]);
+
+  const nextQuestion = (correct) => {
+    const timeUsed = (Date.now() - startTime) / 1000;
+    setTimes(prev => [...prev, timeUsed]);
+
+    if (correct) {
+      setScore(s => s + 1);
+    } else {
+      setMistakes(prev => [...prev, `${question.a}×${question.b}`]);
+    }
+
+    const newCount = count + 1;
+    setCount(newCount);
+
+    if (newCount >= 10) {
+      setIsFinished(true);
+      return;
+    }
+
+    setTimeout(() => {
+      setQuestion(getRandomQuestion());
+      setAnswer("");
+      setTimeLeft(7);
+      setStartTime(Date.now());
+    }, 500);
+  };
+
+  const checkAnswer = () => {
+    const correct = parseInt(answer) === question.a * question.b;
+    nextQuestion(correct);
+  };
+
+  const getRanking = () => {
+    return [...students].sort((a,b)=>{
+      if (b.score !== a.score) return b.score - a.score;
+      return a.avg - b.avg;
+    });
+  };
+
+  if (!mode) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="p-6 space-y-3">
+          <Button onClick={()=>setMode("solo")}>ひとり</Button>
+          <Button onClick={()=>setMode("class")}>みんな</Button>
+          <Button onClick={()=>setMode("teacher")}>せんせい</Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (mode === "teacher") {
+    return (
+      <div className="p-4">
+        <h1>せんせいパネル</h1>
+        <Button onClick={()=>setStarted(true)}>スタート</Button>
+        {getRanking().map((s,i)=>(
+          <Card key={i} className="p-2 my-2">
+            <div>{i+1}い {s.name}</div>
+            <div>{s.score}てん / {s.avg}びょう</div>
+            <div>にがて: {s.mistakes.join(",")}</div>
+          </Card>
+        ))}
+        <Button onClick={()=>setMode(null)}>もどる</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <Card className="p-6 space-y-3">
+        {mode === "class" && !name && (
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="なまえ" />
+        )}
+
+        {!started && mode === "class" ? (
+          <div>せんせいをまってね</div>
+        ) : !isFinished ? (
+          <>
+            <div>{count+1}/10</div>
+            <div className={`text-3xl font-bold ${timeLeft <= 3 ? "text-red-500" : ""}`}>
+              のこり {timeLeft}びょう
+            </div>
+
+            <motion.div key={question.a+"-"+question.b}>
+              {question.a} × {question.b}
+            </motion.div>
+
+            <input
+              autoFocus
+              value={answer}
+              onChange={e=>setAnswer(e.target.value)}
+              onKeyDown={(e)=>{ if(e.key==="Enter") checkAnswer(); }}
+            />
+
+            <Button onClick={checkAnswer}>こたえる</Button>
+          </>
+        ) : (
+          <>
+            <div>おわり</div>
+            <div>{score}/10</div>
+            <div>へいきん {(times.reduce((a,b)=>a+b,0)/times.length).toFixed(2)}びょう</div>
+            <div>ぜんたい {(times.reduce((a,b)=>a+b,0)).toFixed(2)}びょう</div>
+            <div>にがて {mistakes.join(",")}</div>
+            <Button onClick={()=>window.location.reload()}>もういちど</Button>
+          </>
+        )}
+      </Card>
+    </div>
+  );
+}
